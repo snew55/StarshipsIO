@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>ASTEROIDS</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starship.io</title>
+    <style>
+        /* Basic reset and center styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body,
+        html {
+            height: 100%;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #000;
+            color: #FFF;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .start-screen {
+            text-align: center;
+            position: relative;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 3em;
+            color: #FFD700;
+            /* Gold color for title */
+            text-shadow: 2px 2px 8px #FF4500;
+            /* Glow effect */
+        }
+
+        .instructions {
+            font-size: 1.2em;
+            margin: 20px 0;
+        }
+
+        .instructions p {
+            margin-bottom: 10px;
+        }
+
+        #player-name,
+        #start-button,
+        #color-player {
+            display: block;
+            margin: 10px auto;
+        }
+
+        #player-name {
+            font-size: 1.2em;
+            padding: 10px;
+            width: 80%;
+            max-width: 300px;
+            margin: 20px auto 10px auto;
+            /* Adds spacing above and below */
+            border: 2px solid #FFD700;
+            /* Gold border */
+            border-radius: 8px;
+            background-color: #000;
+            /* Black background */
+            color: #FFF;
+            /* White text */
+            text-align: center;
+            box-shadow: 0 0 10px #FF4500;
+            /* Glow effect */
+            outline: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        #player-name:focus {
+            border-color: #FF4500;
+            box-shadow: 0 0 15px #FFD700;
+        }
+
+        #player-name::placeholder {
+            color: #888;
+            font-style: italic;
+        }
+
+        #color-player {
+            font-size: 1em;
+            padding: 10px;
+            width: 80%;
+            max-width: 300px;
+            border: 2px solid #FFD700;
+            border-radius: 8px;
+            background-color: #000;
+            color: #FFF;
+            box-shadow: 0 0 10px #FF4500;
+            outline: none;
+        }
+
+        #start-button {
+            font-size: 1.5em;
+            padding: 10px 20px;
+            color: #FFF;
+            background-color: #007BFF;
+            /* Bright blue button */
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #start-button:hover {
+            background-color: #0056b3;
+        }
+
+        .asteroid {
+            background-color: gray;
+            border-radius: 50%;
+            position: absolute;
+            border: 2px solid #595857;
+            /* Add a border to make the asteroids visible */
+        }
+
+        /* Background container for moving asteroids */
+        #gameArea {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+    </style>
+</head>
+
+
+<body>
+    <!-- Background container for asteroids -->
+    <div id="gameArea"></div>
+
+    <div class="start-screen">
+        <h1>Starship.io</h1>
+
+        <div class="instructions">
+            <p>Welcome to the Starship.io!</p>
+            <p>Navigate your ship, avoid asteroids, and survive as long as you can.</p>
+            <p>Watch out for other ships that want to take your ammo!</p>
+            <p>Controls:</p>
+            <ul>
+                <p>WASD/Arrow Keys to Move</p>
+                <p>Spacebar to Shoot</p>
+                <p>Shift to engage boost</p>
+            </ul>
+        </div>
+        <div>
+            <input type="text" id="player-name" placeholder="Player Name">
+            <select id="color-player">
+                <option value="red">Red</option>
+                <option value="blue">Blue</option>
+                <option value="green">Green</option>
+                <option value="yellow">Yellow</option>
+                <option selected="selected" value="white">White</option>
+            </select>
+            <button id="start-button">Start Game</button>
+        </div>
+    </div>
+
+    <!-- load the socket.io-client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const audio = new Audio("../assets/audio/elevator-to-heaven-aaron-paul-low-main-version-21242-01-42.mp3");
+            audio.loop = true;
+            audio.play().catch(err => console.error("Audio playback failed: ", err)); // Start audio
+        });
+
+            const socket = io();
+
+            const startButton = document.getElementById('start-button');
+            const playerNameInput = document.getElementById("player-name");
+            const colorPlayer = document.getElementById("color-player");
+
+            let prevName = localStorage.getItem("player-name");
+            let prevColor = localStorage.getItem("color-player");
+            if (prevName) {
+                playerNameInput.value = prevName;
+            }
+            if (prevColor) {
+                colorPlayer.value = prevColor;
+            }
+
+            startButton.addEventListener('click', () => {
+                localStorage.setItem("player-name", playerNameInput.value.trim());
+                localStorage.setItem("color-player", colorPlayer.value.trim());
+                window.location.href = '/game';
+            });
+
+            // Home screen asteroids setup
+            const gameArea = document.getElementById("gameArea");
+            let asteroids = [];
+
+            function createAsteroids() {
+                for (let i = 0; i < 20; i++) {
+                    asteroids.push({
+                        x: Math.random() * window.innerWidth,
+                        y: Math.random() * window.innerHeight,
+                        velocityX: (Math.random() - 0.5) * 2,
+                        velocityY: (Math.random() - 0.5) * 2,
+                        size: 25 + Math.random() * 100,
+                    });
+                }
+            }
+
+            function moveAsteroids() {
+                asteroids.forEach(asteroid => {
+                    asteroid.x += asteroid.velocityX;
+                    asteroid.y += asteroid.velocityY;
+
+                    // Wrap asteroids around edges
+                    if (asteroid.x < 0) asteroid.x = window.innerWidth;
+                    if (asteroid.x > window.innerWidth) asteroid.x = 0;
+                    if (asteroid.y < 0) asteroid.y = window.innerHeight;
+                    if (asteroid.y > window.innerHeight) asteroid.y = 0;
+                });
+            }
+
+            function render() {
+                gameArea.innerHTML = "";
+
+                // Render asteroids
+                asteroids.forEach(asteroid => {
+                    const asteroidElement = document.createElement("div");
+                    asteroidElement.classList.add("asteroid");
+                    asteroidElement.style.left = asteroid.x + "px";
+                    asteroidElement.style.top = asteroid.y + "px";
+                    asteroidElement.style.width = asteroid.size + "px";
+                    asteroidElement.style.height = asteroid.size + "px";
+                    gameArea.appendChild(asteroidElement);
+                });
+            }
+
+            function gameLoop() {
+                moveAsteroids();
+                render();
+                requestAnimationFrame(gameLoop);
+            }
+
+            createAsteroids();
+            gameLoop();
+    </script>
+</body>
+
+</html>
